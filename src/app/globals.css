@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { @apply bg-cream text-ink; }
+  ::selection { @apply bg-clay/30; }
+  h1, h2, h3, .font-display { @apply font-serif; }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8; }
+
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-none px-6 py-3 text-[13px] font-semibold uppercase tracking-[0.18em] transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-ink text-cream hover:bg-claydark; }
+  .btn-outline { @apply btn border border-ink bg-transparent text-ink hover:bg-ink hover:text-cream; }
+  .btn-ghost { @apply btn bg-transparent text-ink underline-offset-4 hover:underline px-3; }
+  .btn-sm { @apply px-4 py-2 text-[11px]; }
+
+  .input { @apply w-full border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/40 focus:border-claydark focus:outline-none transition-colors; }
+  .label { @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/70; }
+  .select { @apply input appearance-none pr-8; }
+  .textarea { @apply input min-h-[90px] resize-y; }
+
+  .badge { @apply inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]; }
+  .badge-sale { @apply badge bg-rose-600 text-white; }
+  .badge-new { @apply badge bg-ink text-cream; }
+  .badge-flash { @apply badge bg-gold text-white; }
+
+  .card { @apply border border-line bg-white; }
+
+  .admin-th { @apply px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-ink/60; }
+  .admin-td { @apply px-4 py-3 text-sm text-ink/90 align-middle; }
+  .admin-input { @apply w-full border border-line bg-white px-3 py-2 text-sm focus:border-claydark focus:outline-none; }
+  .admin-label { @apply mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-ink/60; }
+  .admin-card { @apply border border-line bg-white p-5; }
+  .admin-btn { @apply inline-flex items-center gap-2 bg-ink px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-cream transition-colors hover:bg-claydark disabled:opacity-50; }
+  .admin-btn-outline { @apply inline-flex items-center gap-2 border border-ink/30 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition-colors hover:bg-ink hover:text-cream; }
+
+  .nav-link { @apply relative text-[12px] font-semibold uppercase tracking-[0.18em] text-ink/80 transition-colors hover:text-ink after:absolute after:-bottom-1 after:left-0 after:h-px after:w-0 after:bg-ink after:transition-all hover:after:w-full; }
+}
+
+@layer utilities {
+  .fade-up { animation: fadeUp 0.6s ease-out both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: fadeIn 0.5s ease-out both; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
+
+/* invoice printing */
+@media print {
+  body * { visibility: hidden; }
+  #invoice, #invoice * { visibility: visible; }
+  #invoice { position: absolute; inset: 0; background: white; }
+  .no-print { display: none !important; }
+}
