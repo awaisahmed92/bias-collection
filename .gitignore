@@ -7,3 +7,4 @@ public/uploads/*
 !public/uploads/.gitkeep
 .env
 .env*.local
+.DS_Store
