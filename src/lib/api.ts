@@ -42,12 +42,23 @@ export function rateLimit(key: string, limit = 10, windowMs = 60_000): boolean {
   return true;
 }
 
+/**
+ * X-Forwarded-For / X-Real-Ip are attacker-controlled unless a trusted reverse proxy overwrites
+ * them before the request reaches this app. Only honor them when TRUST_PROXY=true is set (i.e.
+ * you've actually deployed behind such a proxy — nginx/Caddy/etc — configured to strip
+ * client-supplied values). Otherwise every request maps to the same bucket, which turns rate
+ * limiting into a blunt global throttle instead of a spoofable per-IP one — safe default until a
+ * real proxy is in front of this app.
+ */
 export function clientIp(req: Request): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-    req.headers.get("x-real-ip") ||
-    "local"
-  );
+  if (process.env.TRUST_PROXY === "true") {
+    return (
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown"
+    );
+  }
+  return "unknown";
 }
 
 /** Audit trail for admin actions. */

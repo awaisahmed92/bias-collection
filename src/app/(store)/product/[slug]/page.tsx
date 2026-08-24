@@ -8,7 +8,7 @@ import ProductGallery from "@/components/store/ProductGallery";
 import ReviewForm from "@/components/store/ReviewForm";
 import ProductGrid from "@/components/store/ProductGrid";
 import { Stars } from "@/components/ui/primitives";
-import { formatDate, formatMoney } from "@/lib/utils";
+import { formatDate, formatMoney, safeJsonLd } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -136,12 +136,12 @@ export default async function ProductPage({ params }: { params: { slug: string }
         </div>
       )}
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
       {/* breadcrumb schema */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: safeJsonLd({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [

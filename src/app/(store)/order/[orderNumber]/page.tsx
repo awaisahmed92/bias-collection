@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrderByNumber } from "@/services/order.service";
 import { formatMoney, formatDateTime, paymentStatusColor } from "@/lib/utils";
+import { getSession } from "@/lib/auth";
+import { verifyOrderToken } from "@/lib/order-token";
 import prisma from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +16,15 @@ export default async function OrderConfirmationPage({
   searchParams,
 }: {
   params: { orderNumber: string };
-  searchParams: { new?: string };
+  searchParams: { new?: string; t?: string };
 }) {
   const order = await getOrderByNumber(params.orderNumber);
   if (!order) notFound();
+
+  const session = await getSession();
+  const owns = order.userId != null && session?.id === order.userId;
+  const hasValidToken = verifyOrderToken(order.id, searchParams.t);
+  if (!owns && !hasValidToken) notFound();
 
   let instructions: string | null = null;
   if (order.paymentMethod === "bank_transfer" && order.paymentStatus === "PENDING") {

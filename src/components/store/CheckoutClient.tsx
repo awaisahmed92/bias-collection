@@ -128,7 +128,8 @@ export default function CheckoutClient() {
       }
       localStorage.removeItem("bias_coupon");
       setCartCount(0);
-      router.push(`/order/${json.data.order.orderNumber}?new=1`);
+      const token = json.data.confirmationToken;
+      router.push(`/order/${json.data.order.orderNumber}?new=1${token ? `&t=${token}` : ""}`);
     } catch {
       setError("Network error — please try again.");
       setPlacing(false);

@@ -86,11 +86,32 @@ export async function validateCoupon(opts: {
   return { code: coupon.code, type: coupon.type, discount, freeShipping, message };
 }
 
+/**
+ * Records a coupon's usage as part of the checkout transaction. The overall usage cap is
+ * re-enforced atomically here via a conditional UPDATE ... WHERE usedCount < usageLimit — the row
+ * lock the UPDATE takes serializes concurrent callers against the same coupon, so two
+ * transactions racing to spend the last unit of a limited coupon can't both succeed (unlike the
+ * plain `validateCoupon` read-then-later-write check, which only looks at usedCount once,
+ * up front, before either transaction has committed).
+ */
 export async function recordCouponUsage(code: string, userId: string | null, orderId: string, tx?: any) {
   const db = tx ?? prisma;
   const coupon = await db.coupon.findUnique({ where: { code } });
   if (!coupon) return;
-  await db.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } });
+
+  if (coupon.usagePerCustomer && userId) {
+    const usedByCustomer = await db.couponUsage.count({ where: { couponId: coupon.id, userId } });
+    if (usedByCustomer >= coupon.usagePerCustomer) {
+      throw new CouponError("You have already used this coupon the maximum number of times.");
+    }
+  }
+
+  const { count } = await db.coupon.updateMany({
+    where: coupon.usageLimit != null ? { id: coupon.id, usedCount: { lt: coupon.usageLimit } } : { id: coupon.id },
+    data: { usedCount: { increment: 1 } },
+  });
+  if (count === 0) throw new CouponError("This coupon has just reached its usage limit.");
+
   await db.couponUsage.create({ data: { couponId: coupon.id, userId: userId ?? null, orderId } });
 }
 

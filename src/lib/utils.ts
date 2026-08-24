@@ -2,6 +2,15 @@ export function cn(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+/**
+ * JSON.stringify does not escape `<`, so a value containing `</script><script>...` breaks out of
+ * a `<script type="application/ld+json">` tag and executes. Use this instead of a bare
+ * JSON.stringify whenever building the `__html` for a JSON-LD script tag.
+ */
+export function safeJsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 export const CURRENCY = process.env.NEXT_PUBLIC_CURRENCY || "Rs.";
 export const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME || "Bias Collection";
 
