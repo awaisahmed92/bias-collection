@@ -84,12 +84,33 @@ export async function placeOrder(raw: unknown) {
   const taxTotal = Math.round((afterCoupon * taxRate) / 100);
 
   const total = Math.max(0, afterCoupon + shippingCost + taxTotal);
-  const orderNumber = await generateOrderNumber();
+  let orderNumber = await generateOrderNumber();
 
   const cart = await resolveCart(userId);
 
+  // generateOrderNumber() reads the current order count without holding a lock, so concurrent
+  // checkouts can be handed the same number — the unique constraint on Order.orderNumber then
+  // rejects all but one at insert time. Retry with a freshly generated number instead of letting
+  // that surface as a raw 500: the whole transaction is rolled back automatically on any throw
+  // (nothing committed yet — stock decrement included), so a full retry is safe.
+  const MAX_ORDER_NUMBER_ATTEMPTS = 5;
   let orderId = "";
-  await prisma.$transaction(async (tx) => {
+  for (let attempt = 1; attempt <= MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
+    try {
+      await runOrderTransaction(orderNumber);
+      break;
+    } catch (e: any) {
+      const isOrderNumberCollision = e?.code === "P2002" && e?.meta?.target?.includes?.("orderNumber");
+      if (!isOrderNumberCollision) throw e;
+      if (attempt === MAX_ORDER_NUMBER_ATTEMPTS) {
+        throw new CheckoutError("We couldn't place your order right now — please try again.");
+      }
+      orderNumber = await generateOrderNumber();
+    }
+  }
+
+  async function runOrderTransaction(orderNumber: string) {
+    await prisma.$transaction(async (tx) => {
     // 1. decrement stock + inventory logs
     for (const line of summary.items) {
       await adjustStock(tx, {
@@ -196,7 +217,8 @@ export async function placeOrder(raw: unknown) {
 
     // 6. empty cart
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-  });
+    });
+  }
 
   // post-commit side effects
   await notifyOrderPlaced({ id: orderId, orderNumber, total, userId, email: input.email.toLowerCase() });

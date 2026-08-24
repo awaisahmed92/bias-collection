@@ -16,11 +16,17 @@ API calls, real end-to-end checkouts, concurrency tests, and a full manual regre
 Next.js version bump). That includes the Next.js 14.2.5 → 14.2.35 upgrade, done last since it was
 the highest-blast-radius change.
 
-**Still open**: the `middleware.ts` informational note (by design, no fix needed), the
-newly-discovered `generateOrderNumber()` race (spawned as its own task, not fixed here — see
-"Reliability"), the "Security — general hardening" list (Redis rate limiting, `JWT_SECRET`
-rotation, `Decimal` money columns — all deployment-time concerns, not code bugs), Cleanup, and
-Product/roadmap. None of these were requested to be fixed yet.
+The `generateOrderNumber()` race discovered while testing the coupon fix is also now fixed (see
+"Reliability"), and Cleanup is done (stray `README (1).md` removed, no generated files found
+tracked in git).
+
+**Still open, deliberately**: the `middleware.ts` informational note (by design, no fix needed);
+two items in "Security — general hardening" that are genuine deployment-time infra/ops work rather
+than code bugs — moving rate limiting to Redis (needs an actual Redis instance) and rotating
+`JWT_SECRET` (pointless on a machine that never leaves local dev); the `Decimal` money-columns
+migration (blocked on the Postgres cutover itself, not doable while still on SQLite); and
+Product/roadmap (search engine swap, real product photography, real notification providers — all
+explicitly "not urgent" product decisions, not bugs).
 
 ## Done (setup pass — 2026-08-23)
 
@@ -168,18 +174,23 @@ Product/roadmap. None of these were requested to be fixed yet.
 
 ## Reliability
 
-- [ ] **`generateOrderNumber()` has a TOCTOU race — concurrent checkouts can collide and crash
-      with a raw 500.** `src/services/order.service.ts` (lines 7–17) does `count → format → check
-      exists`, but the actual `order.create()` happens later, outside this function, inside
-      `checkout.service.ts`'s transaction — so two concurrent checkouts can both read the same
-      count and generate the identical order number before either commits. Found while verifying
-      the coupon TOCTOU fix above: 6 concurrent guest checkouts → 5 failed with a raw Prisma
-      "Unique constraint failed on the fields: (`orderNumber`)" 500 error, only 1 succeeded.
-      Not itself a security hole, but a real reliability bug under concurrent load (and a raw
-      Prisma error reaching the client). Spawned as a separate task
-      (`task_a89843bb`, "Fix race condition in order number generation") rather than fixed inline.
-      **Fix direction**: make number generation atomic with the insert (retry-on-conflict loop
-      around `order.create()`, or a DB-level counter/sequence) instead of check-then-later-write.
+- [x] **`generateOrderNumber()` had a TOCTOU race — concurrent checkouts could collide and crash
+      with a raw 500.** — **Fixed 2026-08-24.** `src/services/checkout.service.ts`'s `placeOrder()`
+      now wraps the order transaction in a retry loop (`runOrderTransaction`, up to 5 attempts):
+      on a Prisma `P2002` unique-constraint error targeting `orderNumber`, it regenerates the
+      number and retries the whole transaction (safe because Prisma auto-rolls-back everything —
+      stock decrement included — on any throw, so nothing partial survives a retry). Exhausting all
+      5 attempts throws a friendly `CheckoutError` instead of ever leaking the raw Prisma error to
+      the client. `generateOrderNumber()` itself (`src/services/order.service.ts`) is unchanged —
+      it can still hand out a colliding number under concurrency, but that's no longer visible as a
+      failure.
+      **Verified**: re-ran the same 8-concurrent-guest-checkout scenario that originally surfaced
+      this — all 8 now return 200 with 8 distinct order numbers (previously 5–7 of 8 failed with a
+      raw "Unique constraint failed" 500).
+      Original finding: `generateOrderNumber()` does `count → format → check exists`, but the
+      actual `order.create()` happens later, outside that function, inside the checkout
+      transaction — so two concurrent checkouts could read the same count and generate the
+      identical order number before either committed.
 
 ## Security — low / informational
 
@@ -230,18 +241,29 @@ Confirmed by direct code review, listed so nobody re-litigates these later:
 
 - [ ] Move rate limiting (login/register/checkout) from in-memory to Redis (or similar) before any
       real deployment — in-memory means it resets on restart and doesn't work across instances.
+      Deployment-time infra work, not attempted here (no Redis instance in this dev environment).
 - [ ] If deploying for real: rotate `JWT_SECRET` to a freshly generated value — never reuse the
       value currently committed in `.env` on this machine, even though it's now gitignored.
-- [ ] Verify file upload endpoint validates content-type/size **server-side**, not just via
-      client-side `accept` attributes or a trusted `Content-Type` header (spoofable).
+      Deployment-time action; not done here since it would just invalidate every local dev session
+      for no benefit on a machine that never leaves local dev.
+- [x] **Verify file upload endpoint validates content-type/size server-side.** — **Satisfied by
+      the 2026-08-24 fix above** (see "Security — medium"): `uploadFile()` already enforced
+      `MAX_BYTES` server-side, and now also sniffs actual file content via magic bytes instead of
+      trusting the client-supplied `Content-Type` header — closing exactly the gap this item
+      described.
 - [ ] Before switching off SQLite: change money columns from `Float` to `Decimal` in
-      `prisma/schema.prisma` (README already flags this; SQLite lacks native decimal).
+      `prisma/schema.prisma` (README already flags this; SQLite lacks native decimal). Blocked on
+      the Postgres migration itself — not actionable while still on SQLite.
 
 ## Cleanup
 
-- [ ] Delete the stray duplicate `README (1).md` at the repo root.
-- [ ] Decide: keep `next-env.d.ts`/`prisma/dev.db-journal` churn out of git (already gitignored)
-      but confirm no other generated files got swept into the initial commit by mistake.
+- [x] Deleted the stray duplicate `README (1).md` at the repo root. — **Fixed 2026-08-24.**
+      Diffed it against `README.md` first to confirm it was byte-identical, then `git rm`'d it.
+- [x] Confirmed no generated files were swept into git. — **Verified 2026-08-24.**
+      `git ls-files` shows no `.env`, `.DS_Store`, `.next/`, `node_modules/`, or `prisma/dev.db*`.
+      `next-env.d.ts` is tracked but that's normal — it's a stable, rarely-changing TypeScript
+      ambient declaration file that Next.js projects conventionally commit, not a build artifact
+      like `.next/`.
 
 ## Product/roadmap (from README, unchanged — not urgent)
 
